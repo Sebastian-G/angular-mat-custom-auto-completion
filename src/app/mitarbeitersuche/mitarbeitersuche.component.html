@@ -1,0 +1,11 @@
+<mat-form-field>
+  <mat-label>{{ label }}</mat-label>
+  <input type="text" matInput [formControl]="searchControl" [matAutocomplete]="auto"/>
+  <mat-autocomplete #auto="matAutocomplete"
+                    (optionSelected)="onOptionSelected($event); searchControl.reset(displayFn($event.option.value))">
+    <mat-option *ngFor="let option of filteredOptions$ | async" [value]="option" [id]="option.kennung">
+      {{ option.vorname }} {{ option.nachname }} ({{ option.kennung }})
+    </mat-option>
+    <mat-option *ngIf="isLoading$ | async" disabled>Bitte warten ...</mat-option>
+  </mat-autocomplete>
+</mat-form-field>

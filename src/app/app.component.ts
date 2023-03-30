@@ -1,4 +1,6 @@
-import { Component } from '@angular/core';
+import {Component} from '@angular/core';
+import {FormBuilder} from "@angular/forms";
+import {Mitarbeiter, Zustaendigkeit} from "./mitarbeitersuche/mitarbeitersuche.component";
 
 @Component({
   selector: 'app-root',
@@ -6,5 +8,18 @@ import { Component } from '@angular/core';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'test';
+  readonly fg = this.fb.group<{ mitarbeiter: Mitarbeiter | null }>({
+    mitarbeiter: null
+  })
+
+  constructor(private readonly fb: FormBuilder) {
+    this.fg.setValue({
+      mitarbeiter: {
+        kennung: '12345',
+        nachname: 'Mustermann',
+        vorname: 'Max',
+        zustaendigkeit: Zustaendigkeit.BERATER
+      } as Mitarbeiter
+    })
+  }
 }
