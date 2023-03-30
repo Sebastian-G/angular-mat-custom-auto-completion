@@ -1,7 +1,10 @@
 <form [formGroup]="fg">
-  <app-mitarbeitersuche label="Dies ist ein test" formControlName="mitarbeiter"></app-mitarbeitersuche>
+  <app-mitarbeitersuche label="Dies ist ein test" formControlName="mitarbeiter" [required]="false"></app-mitarbeitersuche>
 
   <pre>
     {{ fg.getRawValue() | json}}
+  </pre>
+  <pre>
+    {{ fg.status | json}}
   </pre>
 </form>

@@ -13,13 +13,13 @@ export class AppComponent {
   })
 
   constructor(private readonly fb: FormBuilder) {
-    this.fg.setValue({
-      mitarbeiter: {
-        kennung: '12345',
-        nachname: 'Mustermann',
-        vorname: 'Max',
-        zustaendigkeit: Zustaendigkeit.BERATER
-      } as Mitarbeiter
-    })
+    // this.fg.setValue({
+    //   mitarbeiter: {
+    //     kennung: '12345',
+    //     nachname: 'Mustermann',
+    //     vorname: 'Max',
+    //     zustaendigkeit: Zustaendigkeit.BERATER
+    //   } as Mitarbeiter
+    // })
   }
 }

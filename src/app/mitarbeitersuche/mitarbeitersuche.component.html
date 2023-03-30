@@ -1,11 +1,17 @@
 <mat-form-field>
   <mat-label>{{ label }}</mat-label>
-  <input type="text" matInput [formControl]="searchControl" [matAutocomplete]="auto"/>
+  <input #searchInput type="text" matInput [formControl]="searchControl" [matAutocomplete]="auto"
+         (click)="searchInput.select()"
+  />
   <mat-autocomplete #auto="matAutocomplete"
-                    (optionSelected)="onOptionSelected($event); searchControl.reset(displayFn($event.option.value))">
-    <mat-option *ngFor="let option of filteredOptions$ | async" [value]="option" [id]="option.kennung">
-      {{ option.vorname }} {{ option.nachname }} ({{ option.kennung }})
-    </mat-option>
-    <mat-option *ngIf="isLoading$ | async" disabled>Bitte warten ...</mat-option>
+                    (optionSelected)="onOptionSelected($event)"
+                    (closed)="searchControl.reset(displayFn(formControl.value))">
+    <mat-option *ngIf="isLoading$ | async; else loadedTemplate" disabled>Bitte warten ...</mat-option>
+    <ng-template #loadedTemplate>
+      <mat-option *ngFor="let option of filteredOptions$ | async" [value]="option" [id]="option.kennung">
+        {{ option.vorname }} {{ option.nachname }} ({{ option.kennung }})
+      </mat-option>
+      <mat-option *ngIf="!required" [value]="null" style="font-style: italic">Kein Mitarbeiter</mat-option>
+    </ng-template>
   </mat-autocomplete>
 </mat-form-field>

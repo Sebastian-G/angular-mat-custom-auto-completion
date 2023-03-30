@@ -1,20 +1,32 @@
-import {AfterViewInit, Component, forwardRef, Input, OnInit} from '@angular/core';
+import {Component, forwardRef, HostListener, Input, OnChanges, OnInit, SimpleChanges} from '@angular/core';
 import {CommonModule} from '@angular/common';
-import {ControlValueAccessor, FormControl, NG_VALUE_ACCESSOR, ReactiveFormsModule} from "@angular/forms";
+import {
+  AbstractControl,
+  ControlValueAccessor,
+  FormControl,
+  NG_VALIDATORS,
+  NG_VALUE_ACCESSOR,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validator,
+  Validators
+} from "@angular/forms";
 import {MatAutocompleteModule, MatAutocompleteSelectedEvent} from "@angular/material/autocomplete";
 import {
   BehaviorSubject,
   delay,
-  distinct, distinctUntilChanged,
+  distinctUntilChanged,
   finalize,
-  map, merge,
+  map,
+  merge,
   Observable,
   of,
   ReplaySubject,
-  startWith,
-  withLatestFrom
+  shareReplay,
+  startWith
 } from "rxjs";
 import {MatInputModule} from "@angular/material/input";
+import {BooleanInput, coerceBooleanProperty} from "@angular/cdk/coercion";
 
 export enum Zustaendigkeit {
   BERATER = 'BERATER'
@@ -60,44 +72,96 @@ export class MitarbeiterService {
   standalone: true,
   imports: [CommonModule, MatInputModule, MatAutocompleteModule, ReactiveFormsModule],
   templateUrl: './mitarbeitersuche.component.html',
-  providers: [{
-    provide: NG_VALUE_ACCESSOR,
-    useExisting: forwardRef(() => MitarbeitersucheComponent),
-    multi: true
-  },
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      useExisting: forwardRef(() => MitarbeitersucheComponent),
+      multi: true
+    },
+    {
+      provide: NG_VALIDATORS,
+      useExisting: forwardRef(() => MitarbeitersucheComponent),
+      multi: true
+    },
     MitarbeiterService
   ]
 })
-export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit {
+export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, Validator, OnChanges {
 
   @Input() label: string = '';
 
+  private _required = true;
+  get required() {
+    return this._required;
+  }
+
+  @Input() set required(val: BooleanInput) {
+    this._required = coerceBooleanProperty(val);
+    this._required ?
+      this.formControl.setValidators(Validators.required) :
+      this.formControl.removeValidators(Validators.required);
+  }
+
+  @Input() initialKennung?: string;
+
+  @Input() set restrictedKennung(val: string[] | undefined) {
+    this.restrictedKennungenSubject.next(val)
+  };
+
+  get restrictedKennung() {
+    return this.restrictedKennungenSubject.getValue()
+  }
+
   private readonly loadingSubject = new ReplaySubject<boolean>(1);
   readonly isLoading$ = this.loadingSubject.asObservable();
-  private readonly optionsSubject: BehaviorSubject<Mitarbeiter[]> = new BehaviorSubject<Mitarbeiter[]>([]);
+  private readonly optionsSubject = new BehaviorSubject<Mitarbeiter[]>([]);
+  private readonly restrictedKennungenSubject = new BehaviorSubject<string[] | undefined>(undefined);
 
-  private readonly formControl = new FormControl<Mitarbeiter | null>(null);
+  readonly formControl = new FormControl<Mitarbeiter | null>(null, Validators.required);
   readonly searchControl = new FormControl<string>('');
 
-  readonly filteredOptions$: Observable<Mitarbeiter[]> = merge(this.optionsSubject.asObservable(), this.searchControl.valueChanges).pipe(
-    map(() => this.searchControl.value),
-    map((value) => typeof value === 'string' ? value : ''),
-    distinctUntilChanged(),
-    startWith(''),
-    withLatestFrom(this.optionsSubject),
-    map(([searchTerm, options]: [string | null, Mitarbeiter[]]): Mitarbeiter[] =>
-      filterMitarbeiter(options, `${searchTerm ?? ''}`.toLowerCase(), this.displayFn)
-    )
-  )
+  readonly filteredOptions$: Observable<Mitarbeiter[]> =
+    // install trigger $
+    merge(this.optionsSubject.asObservable(), this.searchControl.valueChanges, this.restrictedKennungenSubject.asObservable())
+      .pipe(
+        // trigger to search text
+        map(() => this.searchControl.value),
+        map((value) => typeof value === 'string' ? value : ''),
+        // relax
+        distinctUntilChanged(),
+        // trigger initial filter options
+        startWith(''),
+        // heavy filter magic
+        map((searchTerm: string | null): Mitarbeiter[] =>
+          filterMitarbeiter(!!this.restrictedKennung?.length
+              ? filterForRestrictedKennungen(this.optionsSubject.getValue(), this.restrictedKennung)
+              : [...this.optionsSubject.getValue()],
+            (searchTerm ?? '').toLowerCase(),
+            this.displayFn
+          )
+        ),
+        // boost performance if there are multiple sub.
+        shareReplay()
+      )
 
+  @HostListener('click')
   touched = () => {
   }
 
   constructor(private readonly mitarbeiterService: MitarbeiterService) {
   }
 
-  ngOnInit() {
+  ngOnInit(): void {
     this.refreshMitarbeiterAuswahlOptionen()
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if ('initialKennung' in changes && changes['initialKennung'].currentValue) {
+      // TODO: verify what to do in this case
+      // this.writeValue({
+      //   kennung: changes.initialKennung.currentValue
+      // })
+    }
   }
 
   writeValue(value: Mitarbeiter): void {
@@ -137,8 +201,15 @@ export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit {
     this.loadingSubject.next(true);
     this.mitarbeiterService.getMitarbeiter().pipe(finalize(() => this.loadingSubject.next(false))).subscribe(this.optionsSubject)
   }
+
+  validate(control: AbstractControl): ValidationErrors | null {
+    return this.formControl.errors
+  }
 }
 
+export function filterForRestrictedKennungen(mitarbeiterListe: Mitarbeiter[], whiteList: string[]): Mitarbeiter[] {
+  return mitarbeiterListe.filter((m) => whiteList.includes(m.kennung));
+}
 
 export function filterMitarbeiter(mitarbeiterListe: Mitarbeiter[], searchTerm: string,
                                   displayFn?: (employee: Mitarbeiter) => string
