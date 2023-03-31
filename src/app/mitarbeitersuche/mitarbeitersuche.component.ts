@@ -13,9 +13,9 @@ import {
 } from "@angular/forms";
 import {MatAutocompleteModule, MatAutocompleteSelectedEvent} from "@angular/material/autocomplete";
 import {
-  BehaviorSubject,
+  BehaviorSubject, combineLatest,
   delay,
-  distinctUntilChanged,
+  distinctUntilChanged, filter,
   finalize,
   map,
   merge,
@@ -23,10 +23,11 @@ import {
   of,
   ReplaySubject,
   shareReplay,
-  startWith
+  startWith, tap, throwError
 } from "rxjs";
 import {MatInputModule} from "@angular/material/input";
 import {BooleanInput, coerceBooleanProperty} from "@angular/cdk/coercion";
+import {MatIconModule} from "@angular/material/icon";
 
 export enum Zustaendigkeit {
   BERATER = 'BERATER'
@@ -62,15 +63,21 @@ const MOCK_MITARBEITER: Mitarbeiter[] = [
 ];
 
 export class MitarbeiterService {
-  public getMitarbeiter(): Observable<Mitarbeiter[]> {
-    return of([...MOCK_MITARBEITER]).pipe(delay(10000))
+  public getMitarbeiter(type: Zustaendigkeit): Observable<Mitarbeiter[]> {
+    switch (type) {
+      case Zustaendigkeit.BERATER:
+        return of([...MOCK_MITARBEITER]).pipe(delay(10000))
+      default:
+        return throwError(() => new Error('Zustaendigkeit nicht bekannt'))
+    }
+
   }
 }
 
 @Component({
   selector: 'app-mitarbeitersuche',
   standalone: true,
-  imports: [CommonModule, MatInputModule, MatAutocompleteModule, ReactiveFormsModule],
+  imports: [CommonModule, MatInputModule, MatAutocompleteModule, ReactiveFormsModule, MatIconModule],
   templateUrl: './mitarbeitersuche.component.html',
   providers: [
     {
@@ -86,9 +93,10 @@ export class MitarbeiterService {
     MitarbeiterService
   ]
 })
-export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, Validator, OnChanges {
+export class MitarbeitersucheComponent implements ControlValueAccessor, Validator, OnChanges, OnInit {
 
   @Input() label: string = '';
+  @Input() type: Zustaendigkeit = Zustaendigkeit.BERATER;
 
   private _required = true;
   get required() {
@@ -97,12 +105,28 @@ export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, 
 
   @Input() set required(val: BooleanInput) {
     this._required = coerceBooleanProperty(val);
-    this._required ?
-      this.formControl.setValidators(Validators.required) :
+    if (this.required) {
+      this.formControl.setValidators(Validators.required)
+      this.searchControl.setValidators(Validators.required)
+    } else {
       this.formControl.removeValidators(Validators.required);
+      this.searchControl.removeValidators(Validators.required);
+    }
   }
 
-  @Input() initialKennung?: string;
+  /**
+   * Die initialKennung wird sofern gesetzt höher priorisiert, wie die initiale Auswahl der Reactive-Form-Controller.
+   * @param val mitarbeiter kennung
+   */
+  @Input() set initialKennung(val: string | undefined) {
+    this.initialKennungSubject.next(val);
+  }
+
+  get initialKennung() {
+    return this.initialKennungSubject.getValue();
+  }
+
+  private readonly initialKennungSubject = new BehaviorSubject<string | undefined>('')
 
   @Input() set restrictedKennung(val: string[] | undefined) {
     this.restrictedKennungenSubject.next(val)
@@ -152,15 +176,25 @@ export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, 
   }
 
   ngOnInit(): void {
-    this.refreshMitarbeiterAuswahlOptionen()
+    combineLatest(
+      [
+        this.initialKennungSubject.pipe(filter((initialKennung) => !!initialKennung?.trim())),
+        this.optionsSubject.pipe(filter((options) => !!options.length))
+      ]
+    ).pipe(
+      map(([initialKennung, options]) => options.find(o => o.kennung === initialKennung)),
+      filter((initialerMitarbeiter: Mitarbeiter | undefined) => !!initialerMitarbeiter),
+      map((initialerMitarbeiter: Mitarbeiter | undefined): Mitarbeiter => initialerMitarbeiter as Mitarbeiter)
+    ).subscribe((initialerMitarbeiter: Mitarbeiter) => this.writeValue(initialerMitarbeiter))
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if ('type' in changes && changes['type'].currentValue
+      && changes['type'].previousValue !== changes['type'].currentValue) {
+      this.refreshMitarbeiterAuswahlOptionen()
+    }
     if ('initialKennung' in changes && changes['initialKennung'].currentValue) {
-      // TODO: verify what to do in this case
-      // this.writeValue({
-      //   kennung: changes.initialKennung.currentValue
-      // })
+
     }
   }
 
@@ -181,7 +215,7 @@ export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, 
     this.touched = fn
   }
 
-  setDisabledState(isDisabled: boolean) {
+  setDisabledState(isDisabled: boolean): void {
     if (isDisabled) {
       this.formControl.disable();
     } else {
@@ -190,7 +224,7 @@ export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, 
   }
 
   displayFn(employee: Mitarbeiter | null): string {
-    return employee ? `${employee.vorname} ${employee.nachname}` : '-';
+    return employee ? `${employee.vorname} ${employee.nachname}` : '';
   }
 
   onOptionSelected(event: MatAutocompleteSelectedEvent): void {
@@ -199,7 +233,11 @@ export class MitarbeitersucheComponent implements ControlValueAccessor, OnInit, 
 
   private refreshMitarbeiterAuswahlOptionen(): void {
     this.loadingSubject.next(true);
-    this.mitarbeiterService.getMitarbeiter().pipe(finalize(() => this.loadingSubject.next(false))).subscribe(this.optionsSubject)
+    this.mitarbeiterService.getMitarbeiter(this.type)
+      .pipe(
+        finalize(() => this.loadingSubject.next(false))
+      )
+      .subscribe(this.optionsSubject)
   }
 
   validate(control: AbstractControl): ValidationErrors | null {

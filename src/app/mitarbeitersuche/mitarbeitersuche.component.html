@@ -3,9 +3,10 @@
   <input #searchInput type="text" matInput [formControl]="searchControl" [matAutocomplete]="auto"
          (click)="searchInput.select()"
   />
+  <mat-icon matSuffix *ngIf="isLoading$ | async">pending</mat-icon>
   <mat-autocomplete #auto="matAutocomplete"
                     (optionSelected)="onOptionSelected($event)"
-                    (closed)="searchControl.reset(displayFn(formControl.value))">
+                    (closed)="searchControl.setValue(displayFn(formControl.value))">
     <mat-option *ngIf="isLoading$ | async; else loadedTemplate" disabled>Bitte warten ...</mat-option>
     <ng-template #loadedTemplate>
       <mat-option *ngFor="let option of filteredOptions$ | async" [value]="option" [id]="option.kennung">

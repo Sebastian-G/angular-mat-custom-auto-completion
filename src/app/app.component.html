@@ -1,10 +1,24 @@
-<form [formGroup]="fg">
-  <app-mitarbeitersuche label="Dies ist ein test" formControlName="mitarbeiter" [required]="false"></app-mitarbeitersuche>
+<form [formGroup]="fg" style="display: flex; flex-direction: column; width: 100%; gap: 1rem">
+  <div style="display: flex; flex: 0 1 auto; justify-content: center; align-content: center; margin-top: 5rem">
+    <app-mitarbeitersuche
+      label="Mitarbeiter des Monats"
+      formControlName="mitarbeiter"
+      [type]="Zustaendigkeit.BERATER"
+      [initialKennung]="'11111'"
+      [restrictedKennung]="['11111','999999']"
+      [required]="false"></app-mitarbeitersuche>
+  </div>
 
-  <pre>
-    {{ fg.getRawValue() | json}}
-  </pre>
-  <pre>
-    {{ fg.status | json}}
-  </pre>
+
+  <div>
+    <h5>Form data</h5>
+    <pre>{{ fg.getRawValue() | json}}</pre>
+  </div>
+
+  <div>
+    <h5>Form status</h5>
+    <pre>{{ fg.status | json}}</pre>
+    <h6>Errors "mitarbeiter" ctrl</h6>
+    <pre>{{ fg.get('mitarbeiter')?.errors | json}}</pre>
+  </div>
 </form>
